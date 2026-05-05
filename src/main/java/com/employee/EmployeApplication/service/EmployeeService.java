@@ -1,64 +1,76 @@
 package com.employee.EmployeApplication.service;
 
+import com.employee.EmployeApplication.dto.EmployeeRequestDTO;
+import com.employee.EmployeApplication.dto.EmployeeResponseDTO;
 import com.employee.EmployeApplication.entity.Employee;
+import com.employee.EmployeApplication.exception.EmployeeNotFoundException;
+import com.employee.EmployeApplication.mapper.EmployeeMapper;
 import com.employee.EmployeApplication.repository.EmployeeRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 @Service
 public class EmployeeService {
-    @Autowired
+
+    @Autowired 
     private EmployeeRepository employeeRepository;
-    private List<Employee> employeeList = new ArrayList<>(Arrays.asList(
-            new Employee(1,"First Employee","Washington"),
-            new Employee(2,"second Employee","Gitega")
-    ));
+    @Autowired 
+    private EmployeeMapper employeeMapper;
 
 
-    public List<Employee> getAllEmployees(){
-        return employeeRepository.findAll();
-
+    public List<EmployeeResponseDTO> getAllEmployees() {
+        return employeeMapper.toResponseDTOList(employeeRepository.findAll());
     }
 
-    public Employee getAnEmployee(int id){
-//        return employeeList.stream()
-//                .filter(e -> e.getEmployeeId()==id)
-//                .findFirst()
-//                .orElseThrow(() -> new RuntimeException("no Employee with that id found..!"));
-       return  employeeRepository.findById(id).orElseThrow(() -> new RuntimeException("not found"));
+
+    public EmployeeResponseDTO getEmployeeById(Integer id) {
+        Employee employee = employeeRepository.findById(id)
+                .orElseThrow(() -> new EmployeeNotFoundException(id));
+        return employeeMapper.toResponseDTO(employee);
     }
 
-    public void createEmployee(Employee employee){
-        if (employee.getAddresses() != null) {
-            employee.getAddresses().forEach(address -> address.setEmployee(employee));
+
+    @Transactional
+    public EmployeeResponseDTO createEmployee(EmployeeRequestDTO request) {
+        Employee employee = employeeMapper.toEntity(request);
+        Employee saved = employeeRepository.save(employee);
+        return employeeMapper.toResponseDTO(saved);
+    }
+
+    @Transactional
+    public EmployeeResponseDTO updateEmployee(Integer id, EmployeeRequestDTO request) {
+        Employee existing = employeeRepository.findById(id)
+                .orElseThrow(() -> new EmployeeNotFoundException(id));
+
+        existing.setEmployeeName(request.employeeName());
+        existing.setEmployeeCity(request.employeeCity());
+
+        if (request.spouse() != null) {
+            existing.setSpouse(employeeMapper.toSpouseEntity(request.spouse()));
         }
 
-        if (employee.getProjects() != null) {
-            employee.getProjects().forEach(project -> {
-                project.getEmployeeList().add(employee);
-            });
-        }       
+        if (request.addresses() != null) {
+            existing.getAddresses().clear();
+            request.addresses().forEach(aDto -> existing.addAddress(employeeMapper.toAddressEntity(aDto)));
+        }
 
-        employeeRepository.save(employee);    }
+        if (request.projects() != null) {
+            existing.getProjects().clear();
+            request.projects().forEach(pDto -> existing.addProject(employeeMapper.toProjectEntity(pDto)));
+        }
 
-    public void updateEmployee(Employee employee) {
-//        employeeList.stream()
-//                .filter(e->e.getEmployeeId()==employee.getEmployeeId())
-//                .findFirst()
-//                .ifPresent(e->{
-//                    e.setEmployeeId(employee.getEmployeeId());
-//                    e.setEmployeeName(employee.getEmployeeName());
-//                    e.setEmployeeCity(employee.getEmployeeCity());
-//                });
-        employeeRepository.save(employee);
+        return employeeMapper.toResponseDTO(employeeRepository.save(existing));
     }
 
-    public void deleteEmployee(int id) {
-        employeeRepository.delete(employeeRepository.getById(id));
-      //  employeeList.removeIf(e -> e.getEmployeeId() == id);
+
+    @Transactional
+    public void deleteEmployee(Integer id) {
+        if (!employeeRepository.existsById(id)) {
+            throw new EmployeeNotFoundException(id);
+        }
+        employeeRepository.deleteById(id);
     }
 }
